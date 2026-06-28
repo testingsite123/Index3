@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Restaurant Queue Management System</title>
+    <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { margin: 0; padding: 20px; bg-color: #f5f7fb; background: #f5f7fb; }
+        h1 { text-align: center; color: #333; margin-bottom: 30px; }
+        
+        /* Dashboard Layout */
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 20px;
+        }
+        
+        /* Panel Styles */
+        .panel {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            border-top: 5px solid #ccc;
+        }
+        #reception-panel { border-top-color: #3498db; }
+        #kitchen-panel { border-top-color: #e67e22; }
+        #customer-panel { border-top-color: #2ecc71; }
+        
+        h2 { margin-top: 0; color: #2c3e50; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        
+        /* Form & Inputs */
+        .form-group { display: flex; gap: 10px; margin-bottom: 20px; }
+        input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 16px; }
+        button { padding: 10px 15px; border: none; background: #3498db; color: white; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        button:hover { opacity: 0.9; }
+        
+        /* List Items */
+        .order-list { list-style: none; padding: 0; margin: 0; }
+        .order-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            background: #f8f9fa;
+            margin-bottom: 10px;
+            border-radius: 6px;
+            border-left: 4px solid #ddd;
+        }
+        .kitchen-item { border-left-color: #e67e22; }
+        .customer-item { border-left-color: #2ecc71; font-size: 18px; }
+        
+        .btn-ready { background: #e67e22; }
+        .btn-serve { background: #2ecc71; }
+        
+        /* Customer Display Specifics */
+        .display-boards { display: flex; gap: 10px; margin-top: 15px; }
+        .board { flex: 1; text-align: center; padding: 15px; border-radius: 8px; }
+        .preparing-board { background: #fff3cd; color: #856404; }
+        .ready-board { background: #d4edda; color: #155724; font-size: 24px; font-weight: bold; animation: blink 1.5s infinite; }
+        
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0.6; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🍽️ Live Restaurant Queue Dashboard</h1>
+
+    <div class="dashboard">
+        
+        <div class="panel" id="reception-panel">
+            <h2>1. Reception (New Orders)</h2>
+            <div class="form-group">
+                <input type="text" id="customer-name" placeholder="Customer Name or Token #" required>
+                <button onclick="createNewOrder()">Send to Kitchen</button>
+            </div>
+            <h3>Active Queue Tracker</h3>
+            <ul id="reception-queue" class="order-list"></ul>
+        </div>
+
+        <div class="panel" id="kitchen-panel">
+            <h2>2. Kitchen Staff</h2>
+            <p style="color: #666; font-size: 0.9em;">Click "Order Ready" to move to pickup and trigger voice announcement.</p>
+            <ul id="kitchen-queue" class="order-list"></ul>
+        </div>
+
+        <div class="panel" id="customer-panel">
+            <h2>3. Customer TV Display</h2>
+            <div class="display-boards">
+                <div class="board preparing-board">
+                    <h3>Cooking ⏳</h3>
+                    <ul id="customer-preparing" class="order-list"></ul>
+                </div>
+                <div class="board ready-board">
+                    <h3>Please Pick Up 🎉</h3>
+                    <ul id="customer-ready" class="order-list"></ul>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // In-memory array state holding all active orders
+        // Order structure: { id: timestamp, name: string, status: 'preparing' | 'ready' }
+        let orders = [];
+
+        // --- Core Functions ---
+
+        // 1. Reception: Add new order
+        function createNewOrder() {
+            const nameInput = document.getElementById('customer-name');
+            const name = nameInput.value.trim();
+            
+            if (!name) return alert("Please enter a customer name or token number!");
+
+            const newOrder = {
+                id: Date.now(),
+                name: name,
+                status: 'preparing'
+            };
+
+            orders.push(newOrder);
+            nameInput.value = ''; // clear input
+            updateInterfaces();
+        }
+
+        // 2. Kitchen: Mark order as Ready & Trigger Voice
+        function markAsReady(orderId) {
+            const order = orders.find(o => o.id === orderId);
+            if (order) {
+                order.status = 'ready';
+                updateInterfaces();
+                announceOrderReady(order.name);
+            }
+        }
+
+        // 3. Customer/Staff: Clear / Dismiss served order from system
+        function completeOrder(orderId) {
+            orders = orders.filter(o => o.id !== orderId);
+            updateInterfaces();
+        }
+
+        // --- Voice Announcement Engine ---
+        function announceOrderReady(customerName) {
+            // Check if Web Speech API is supported
+            if ('speechSynthesis' in window) {
+                // Cancel any ongoing speech so it alerts immediately
+                window.speechSynthesis.cancel(); 
+
+                const message = `Attention please. Order for ${customerName} is ready for pickup.`;
+                const utterance = new SpeechSynthesisUtterance(message);
+                
+                // Optional tuning
+                utterance.rate = 0.95; // Slightly slower for clarity
+                utterance.pitch = 1.0; 
+                
+                window.speechSynthesis.speak(utterance);
+            } else {
+                console.log("Text-to-speech not supported in this browser.");
+            }
+        }
+
+        // --- UI Rendering Engine ---
+        function updateInterfaces() {
+            const receptionQueue = document.getElementById('reception-queue');
+            const kitchenQueue = document.getElementById('kitchen-queue');
+            const customerPreparing = document.getElementById('customer-preparing');
+            const customerReady = document.getElementById('customer-ready');
+
+            // Clear all views
+            receptionQueue.innerHTML = '';
+            kitchenQueue.innerHTML = '';
+            customerPreparing.innerHTML = '';
+            customerReady.innerHTML = '';
+
+            orders.forEach(order => {
+                // Render Reception Monitor View
+                const repLi = document.createElement('li');
+                repLi.className = 'order-item';
+                repLi.innerHTML = `<span><strong>${order.name}</strong></span> <small style="color: ${order.status === 'ready' ? 'green' : 'orange'}">${order.status.toUpperCase()}</small>`;
+                receptionQueue.appendChild(repLi);
+
+                if (order.status === 'preparing') {
+                    // Render Kitchen View
+                    const kitLi = document.createElement('li');
+                    kitLi.className = 'order-item kitchen-item';
+                    kitLi.innerHTML = `<span>🍳 ${order.name}</span> <button class="btn-ready" onclick="markAsReady(${order.id})">Order Ready</button>`;
+                    kitchenQueue.appendChild(kitLi);
+
+                    // Render Customer Preparing Column
+                    const custPrepLi = document.createElement('li');
+                    custPrepLi.className = 'order-item customer-item';
+                    custPrepLi.style.fontSize = '15px';
+                    custPrepLi.innerText = order.name;
+                    customerPreparing.appendChild(custPrepLi);
+                } 
+                
+                else if (order.status === 'ready') {
+                    // Render Customer Ready Column
+                    const custReadyLi = document.createElement('li');
+                    custReadyLi.className = 'order-item customer-item';
+                    custReadyLi.style.background = '#e2f7e7';
+                    custReadyLi.innerHTML = `<span>🔔 ${order.name}</span> <button class="btn-serve" onclick="completeOrder(${order.id})">Collected</button>`;
+                    customerReady.appendChild(custReadyLi);
+                }
+            });
+        }
+    </script>
+</body>
+</html>
